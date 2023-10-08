@@ -1,0 +1,135 @@
+- name: Set Vm-specific facts
+  ansible.builtin.set_fact:
+    vm_name: "{{'hadoopSlave' ~ vm_number}}"
+    role: slave
+  when:
+    - vm_number > 0
+
+- name: Create a public IP address
+  azure.azcollection.azure_rm_publicipaddress:
+
+    resource_group: "{{ rg_name }}"
+
+    allocation_method: static
+
+    name: "{{ vm_name | default('hadoopMaster') }}-public-ip"
+
+  register: public_ip
+
+
+- name: Create a network security group and configure the security group
+
+  azure.azcollection.azure_rm_securitygroup:
+
+    resource_group: "{{ rg_name }}"
+
+    name: "{{ vm_name | default('hadoopMaster') }}-nsg"
+
+    rules:
+      - name: "AllowSSH"
+
+        protocol: Tcp
+
+        direction: Inbound
+
+        priority: 1000
+
+        access: Allow
+
+        source_address_prefix: "*"
+
+        source_port_range: "*"
+
+        destination_port_range: "9870,8088"
+
+        destination_address_prefix: "*"
+
+      - name: "AllowHadoopPanel"
+
+        protocol: Tcp
+
+        direction: Inbound
+
+        priority: 1000
+
+        access: Allow
+
+        source_address_prefix: "*"
+
+        source_port_range: "*"
+
+        destination_port_range: "22"
+
+        destination_address_prefix: "*"
+
+  register: nsg
+
+
+- name: Create a Virtual Network Interface Card
+
+  azure.azcollection.azure_rm_networkinterface:
+
+    resource_group: "{{ rg_name }}"
+
+    name: "{{ vm_name | default('hadoopMaster') }}-nic"
+
+    virtual_network: "{{ vnet_name }}"
+
+    subnet_name: "{{ subnet_name }}"
+
+    public_ip_name: "{{ vm_name | default('hadoopMaster') }}-public-ip"
+
+    security_group: "{{ vm_name | default('hadoopMaster') }}-nsg"
+
+
+- name: Create a vm_image
+
+  azure.azcollection.azure_rm_virtualmachine:
+
+    resource_group: "{{ rg_name }}"
+
+    name: "{{ vm_name | default('hadoopMaster') }}"
+
+    vm_size: "{{ (vm_number > 0) | ternary(master_size, slave_size) }}"
+
+    admin_username: "{{ vm_username }}"
+
+    image:
+
+      offer: "0001-com-ubuntu-server-jammy"
+
+      publisher: "Canonical"
+
+      sku: "22_04-lts-gen2"
+
+      version: "latest"
+
+    os_disk_caching: ReadWrite
+
+    os_disk_name: "{{ vm_name | default('hadoopMaster') }}-os-disk"
+
+    network_interface_names:
+
+      - "{{ vm_name | default('hadoopMaster') }}-nic"
+
+    network_interfaces:
+
+      - name: "{{ vm_name | default('hadoopMaster') }}-nic"
+
+        properties:
+
+          primary: true
+
+    availability_set: null
+
+    managed_disk_type: "StandardSSD_LRS"
+
+    ssh_public_keys:
+      - "{{ connection_public_key }}"
+      - "{{ intranode_public_key }}"
+
+
+    ssh_password_enabled: false
+
+    tags:
+      nodeRole: "{{ role | default('master') }}"

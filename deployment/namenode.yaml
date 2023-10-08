@@ -1,0 +1,54 @@
+- name: Configuring hdfs-site.xml
+  ansible.builtin.blockinfile:
+    path: /opt/hadoop/etc/hadoop/hdfs-site.xml
+    insertafter: "<configuration>"
+    block: >
+      <property>
+          <name>dfs.namenode.name.dir</name>
+          <value>/data/nameNode</value>
+        </property>
+        <property>
+          <name>dfs.replication</name>
+          <value>2</value>
+        </property>
+        <property>
+          <name>dfs.permissions.enabled</name>
+            <value>false</value>
+        </property>
+
+- name: Delete localhost from workers
+  ansible.builtin.lineinfile:
+    path: /opt/hadoop/etc/hadoop/workers
+    line: localhost
+    state: absent
+
+- name: Add slaves to workers file
+  ansible.builtin.lineinfile:
+    path: /opt/hadoop/etc/hadoop/workers
+    line: "{{ item }}"
+  loop: "{{ groups['_slave'] }}"
+
+- name: Copy intranode ssh private key to master node
+  ansible.builtin.copy:
+    src: ../.ssh/intranodeKey
+    dest: /home/hadoop/.ssh/id_rsa
+    owner: hadoop
+    group: hadoop
+    mode: '600'
+
+- name: Creating the /data directory
+  ansible.builtin.file:
+    owner: hadoop
+    group: hadoop
+    mode: '700'
+    path: /data
+    state: directory
+  become: true
+
+- name: Format data directory
+  ansible.builtin.command: "hdfs namenode -format" # noqa: no-changed-when
+  environment:
+    JAVA_HOME: /usr/lib/jvm/java-8-openjdk-amd64/
+
+- name: Start daemon
+  ansible.builtin.command: start-all.sh # noqa: no-changed-when

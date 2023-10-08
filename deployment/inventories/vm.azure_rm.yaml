@@ -1,0 +1,7 @@
+plugin: "azure_rm"
+
+plain_host_names: true
+
+auth_source: env
+keyed_groups:
+  - key: tags.nodeRole

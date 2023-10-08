@@ -1,0 +1,9 @@
+- name: Print VMs connection details
+  hosts: all
+  gather_facts: true
+  remote_user: hadoop
+
+  tasks:
+    - name: Use these commands to connect to the VMs
+      ansible.builtin.debug:
+        msg: "ssh -i ./.ssh/connectionKey hadoop@{{ hostvars[inventory_hostname]['public_ipv4_addresses'][0] }}"

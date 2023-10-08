@@ -1,0 +1,83 @@
+- name: Install and configure Hadoop on each node of the cluster
+  hosts: all
+  remote_user: hadoop
+  become: true
+  tasks:
+    - name: Update and upgrade node
+      ansible.builtin.command:
+        cmd: "{{ item }}" # noqa: no-changed-when
+      loop:
+        - sudo apt update
+        - sudo apt upgrade -y
+
+    - name: Install Java 8 JDK
+      ansible.builtin.command: sudo apt install openjdk-8-jdk -y # noqa: no-changed-when
+
+    - name: Check JAVA is correctly installed
+      ansible.builtin.command: javac -version # noqa: no-changed-when
+      register: output
+      failed_when: "'javac 1.8' not in output.stderr"
+
+    - name: Get and extract Hadoop
+      ansible.builtin.unarchive:
+        src: "https://dlcdn.apache.org/hadoop/common/hadoop-3.3.6/hadoop-3.3.6.tar.gz"
+        dest: /tmp
+        remote_src: true
+        owner: hadoop
+        group: hadoop
+
+    - name: Install Hadoop in /opt
+      ansible.builtin.command:
+        cmd: "{{ item }}" # noqa: no-changed-when
+        creates: /opt/hadoop
+      loop:
+        - mv /tmp/hadoop-3.3.6 /opt/hadoop
+        - sudo chown hadoop:hadoop /opt/hadoop
+
+    - name: Set JAVA_HOME and HADOOP_HOME system-wide
+      ansible.builtin.lineinfile:
+        path: /etc/environment
+        line: "{{ item }}"
+      loop:
+        - 'JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64/'
+        - 'HADOOP_HOME=/opt/hadoop'
+      become: true
+
+    - name: Add hadoop bin directories to PATH system-wide
+      ansible.builtin.lineinfile:
+        path: /etc/environment
+        regexp: '^(PATH.*)'
+        line: '\1:/opt/hadoop/bin:/opt/hadoop/sbin'
+        backrefs: true
+      become: true
+
+    - name: Reboot machines for environment variable change takes effect (yeah this is a bit hacky but I'm tired and wat to sleep)
+      ansible.builtin.reboot:
+
+    - name: Configuring core-site.xml
+      ansible.builtin.blockinfile:
+        path: /opt/hadoop/etc/hadoop/core-site.xml
+        insertafter: "<configuration>"
+        block: >
+          <property>
+          <name>fs.defaultFS</name>
+          <value>hdfs://hadoopMaster:9000</value>
+          </property>
+
+    - name: Configuring mapred-site.xml
+      ansible.builtin.blockinfile:
+        path: /opt/hadoop/etc/hadoop/mapred-site.xml
+        insertafter: "<configuration>"
+        block: >
+          <property>
+            <name>mapreduce.framework.name</name>
+            <value>yarn</value>
+          </property>
+
+- name: Master node configuration
+  hosts: _master
+  remote_user: hadoop
+
+  tasks:
+    - name: Run master node configuration playbook
+      ansible.builtin.include_tasks: "namenode.yaml"

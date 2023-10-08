@@ -1,0 +1,52 @@
+- name: Create necessary infrastructure to run a multi-slave Hadoop cluster
+
+  hosts: localhost
+
+  vars_files: variables/vm.yaml
+
+
+  tasks:
+
+    - name: Create a Resource Group
+
+      azure.azcollection.azure_rm_resourcegroup:
+
+        name: "{{ rg_name }}"
+
+        location: "{{ location }}"
+
+      register: rg
+
+
+    - name: Create a Virtual Network
+
+      azure.azcollection.azure_rm_virtualnetwork:
+
+        resource_group: "{{ rg_name }}"
+
+        name: "{{ vnet_name }}"
+
+        address_prefixes: "10.0.0.0/16"
+
+      register: vnet
+
+
+    - name: Create a subnet
+
+      azure.azcollection.azure_rm_subnet:
+
+        resource_group: "{{ rg_name }}"
+
+        virtual_network_name: "{{ vnet_name }}"
+
+        name: "{{ subnet_name }}"
+
+        address_prefix: "10.0.0.0/24"
+
+      register: subnet
+
+    - name: Create the VMs
+      ansible.builtin.include_tasks: "nodeTasks.yaml"
+      loop: "{{ range((number_of_slaves | int) + 1) | list }}"
+      loop_control:
+        index_var: vm_number
